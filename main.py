@@ -72,8 +72,8 @@ def set_seed(seed):
 
 def main(hp: Hyperparameters):
     set_seed(hp.seed)
-    training_loader, validation_loader = loader.create_training_loader()
-    testing_loader  = loader.create_testing_loader()
+    training_loader, validation_loader = loader.create_training_loader(hp)
+    testing_loader  = loader.create_testing_loader(hp)
 
     train_losses = []
     val_losses = []
@@ -89,17 +89,17 @@ def main(hp: Hyperparameters):
         os.makedirs(checkpoint_path, exist_ok=True)
 
     # create an empty model and send it to the device
-    model = Model(hp.input_dim, hp.output_dim, hp.hidden_dim).to(hp.device)
+    model = Model(hp).to(hp.device)
     optimizer = optim.Adam(model.parameters(), lr=hp.initial_learning_rate, weight_decay=hp.weight_decay)
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=hp.step_size, gamma=hp.gamma)
     # scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=hp.factor, patience=hp.patience, min_lr=hp.min_lr)
 
     for epoch in range(hp.epochs+1):
 
-        model, train_loss = train(model, training_loader, optimizer)
+        model, train_loss = train(model, training_loader, optimizer, hp)
         train_losses.append(train_loss)
 
-        val_correct, val_loss = test(model, validation_loader)
+        val_correct, val_loss = test(model, validation_loader, hp)
         val_losses.append(val_loss)
         val_total = len(validation_loader.dataset)
 
@@ -109,7 +109,7 @@ def main(hp: Hyperparameters):
 
         if val_correct >= 175:
             star = "*"
-            pretest_correct, _ = test(model, testing_loader)
+            pretest_correct, _ = test(model, testing_loader, hp)
             pretest_report = f"p: {pretest_correct:>3} / 100"
             if pretest_correct == 100:
                 print(f"Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate} {pretest_report}")
@@ -139,7 +139,7 @@ def main(hp: Hyperparameters):
             break
         
     # Final test evaluation
-    test_correct, test_loss = test(model, testing_loader)
+    test_correct, test_loss = test(model, testing_loader, hp)
     test_losses.append(test_loss)
     print("\nFinal test evaluation")
     print(f"Epoch {epoch:>5} val: {test_correct:>3} / 100")

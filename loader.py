@@ -24,17 +24,6 @@ class Loader:
 
         return training_loader, validation_loader
 
-    # @staticmethod        
-    # def create_training_loader() -> DataLoader:
-    #     training_data = [DataSample.create(n) for n in range(101, 1024)]
-
-    #     training_features = torch.stack([features for _, features, _     in training_data]).to(hp.device)
-    #     training_labels = torch.tensor( [label    for _,        _, label in training_data]).to(hp.device)
-    #     training_dataset = TensorDataset(training_features, training_labels)
-    #     training_loader = DataLoader(training_dataset, batch_size=256, shuffle=True)
-        
-    #     return training_loader
-
     @staticmethod
     def create_testing_loader(hp: Hyperparameters) -> DataLoader:
         testing_data = [DataSample.create(n) for n in range(1, 101)]

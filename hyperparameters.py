@@ -1,4 +1,3 @@
-
 import torch
 
 
@@ -8,6 +7,7 @@ class Hyperparameters:
     input_dim:                     int                      = 10
     output_dim:                    int                      = 4
     hidden_dim:                    int                      = 32
+    drop:                          float                    = 0.2
 
 # for Optimizer 
     initial_learning_rate:         float                    = 0.004
