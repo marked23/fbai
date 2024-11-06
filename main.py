@@ -147,6 +147,7 @@ def main():
     print(f"Epoch {epoch:>5} val: {test_correct:>3} / 100")
 
     if test_correct == 100:
+        os.makedirs(run_path, exist_ok=True)
         torch.save(obj=model.state_dict(), f=f'{run_path}/model.pth')
         print("WIN!... Model saved")
     else:
