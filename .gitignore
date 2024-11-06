@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# Project specific
+results/
+*.gif
+
 # Distribution / packaging
 .Python
 build/
@@ -124,6 +128,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv/
 env/
 venv/
 ENV/
