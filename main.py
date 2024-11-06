@@ -20,10 +20,8 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-hp = Hyperparameters()
 
-
-def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimizer) -> Tuple[torch.nn.Module, float]:
+def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimizer, hp: Hyperparameters) -> Tuple[torch.nn.Module, float]:
     model.train()
     total_loss = 0
     criterion = hp.criterion
@@ -40,7 +38,7 @@ def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimi
     return model, avg_loss
 
 
-def test(model: nn.Module, data_loader: DataLoader) -> Tuple[int, float]:
+def test(model: nn.Module, data_loader: DataLoader, hp: Hyperparameters) -> Tuple[int, float]:
     model.eval()
     total_loss = 0
     num_correct = 0
@@ -72,7 +70,7 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
 
 
-def main():
+def main(hp: Hyperparameters):
     set_seed(hp.seed)
     training_loader, validation_loader = loader.create_training_loader()
     testing_loader  = loader.create_testing_loader()
@@ -156,8 +154,9 @@ def main():
 
 if __name__ == '__main__':
     cleanup()
+    hp = Hyperparameters()
     print(f"Device: {hp.device}")
-    main()
+    main(hp)
     cleanup()
 
 

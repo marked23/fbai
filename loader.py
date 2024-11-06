@@ -4,12 +4,11 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from data_sample import DataSample
 from hyperparameters import Hyperparameters
 
-hp = Hyperparameters()
 
 class Loader:
 
     @staticmethod        
-    def create_training_loader() -> Tuple[DataLoader, DataLoader]:
+    def create_training_loader(hp: Hyperparameters) -> Tuple[DataLoader, DataLoader]:
         training_data = [DataSample.create(n) for n in range(101, 1024)]
 
         training_features = torch.stack([features for _, features, _     in training_data]).to(hp.device)
@@ -37,7 +36,7 @@ class Loader:
     #     return training_loader
 
     @staticmethod
-    def create_testing_loader() -> DataLoader:
+    def create_testing_loader(hp: Hyperparameters) -> DataLoader:
         testing_data = [DataSample.create(n) for n in range(1, 101)]
 
         testing_features = torch.stack([features for _, features, _     in testing_data]).to(hp.device)
