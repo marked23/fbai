@@ -6,7 +6,7 @@ import time
 # for single process logging
 # @staticmethod
 def setup_logging(hp: Hyperparameters):
-    log_format = f'[{hp.parameter_set_id}] %(message)s'
+    log_format = f'[{hp.parameter_set_id:>2}] %(message)s'
     logging.basicConfig(
         level=logging.INFO,
         format=log_format,
@@ -19,7 +19,7 @@ def setup_logging(hp: Hyperparameters):
 # for multi process logging
 # @staticmethod
 def setup_logger(hp: Hyperparameters, queue):
-    log_format = f'[{hp.parameter_set_id}] %(message)s'
+    log_format = f'[{hp.parameter_set_id:>2}] %(message)s'
     queue_handler = logging.handlers.QueueHandler(queue)
     formatter = logging.Formatter(log_format)
     queue_handler.setFormatter(formatter)

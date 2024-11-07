@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import signal
+import sys
 import logging
 import logging.handlers
 import concurrent.futures
@@ -145,7 +147,7 @@ def main(hp: Hyperparameters):
 
     if test_correct == 100:
         os.makedirs(hp.run_path, exist_ok=True)
-        torch.save(obj=model.state_dict(), f=f'{hp.run_path}/model.pth')
+        torch.save(obj=model.state_dict(), f=f'{hp.process_path}/model.pth')
         hp.spit("WIN!... Model saved")
     else:
         hp.spit("meh")
@@ -153,6 +155,16 @@ def main(hp: Hyperparameters):
 def run_job(hp, queue):
     setup_logger(hp, queue) #ger for multi process
     main(hp)
+
+def signal_handler(signum, frame):
+    print("\nCaught Ctrl+C, cleaning up...")
+    # Terminate any running processes
+    for process in multiprocessing.active_children():
+        process.terminate()
+    # Clean up resources
+    cleanup()
+    sys.exit(0)
+
 
 if __name__ == '__main__':
     multiprocessing.set_start_method('spawn')
@@ -166,9 +178,9 @@ if __name__ == '__main__':
         queue = manager.Queue()
 
 
-        hp_sets = [Hyperparameters(i, now) for i in range(30)]
+        hp_sets = [Hyperparameters(i, now) for i in range(5)]
         for i, hp in enumerate(hp_sets):
-            hp.hidden_dim = i + 14
+            hp.hidden_dim = i + 30
 
         run_path = hp_sets[0].run_path
         os.makedirs(run_path, exist_ok=True)
