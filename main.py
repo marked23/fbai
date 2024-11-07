@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+import logging.handlers
 import concurrent.futures
+import multiprocessing
 from datetime import datetime
+import time
 from typing import Callable, NamedTuple, Optional, Tuple, Union
 import torch
 from torch import Size, nn
@@ -22,6 +25,7 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# for single process logging
 def setup_logging(hp: Hyperparameters):
     log_format = f'[{hp.parameter_set_id}] %(message)s'
     logging.basicConfig(
@@ -33,6 +37,39 @@ def setup_logging(hp: Hyperparameters):
         ]
     )
 
+# for multi process logging
+def setup_logger(hp: Hyperparameters, queue):
+    log_format = f'[{hp.parameter_set_id}] %(message)s'
+    queue_handler = logging.handlers.QueueHandler(queue)
+    formatter = logging.Formatter(log_format)
+    queue_handler.setFormatter(formatter)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(queue_handler)
+    hp.spit = logging.info
+
+def listener_configurer():
+    log_format = f'%(message)s'
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        handlers=[
+            logging.FileHandler("parallel_execution.log"),
+            logging.StreamHandler()
+        ]
+    )
+
+def listener_process(queue):
+    listener_configurer()
+    listener = logging.handlers.QueueListener(queue, *logging.getLogger().handlers)
+    listener.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        listener.stop()
 
 def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimizer, hp: Hyperparameters) -> Tuple[torch.nn.Module, float]:
     model.train()
@@ -160,25 +197,38 @@ def main(hp: Hyperparameters):
     else:
         hp.spit("meh")
 
-def run_job(hp):
-    setup_logging(hp)
+def run_job(hp, queue):
+    setup_logger(hp, queue) #ger for multi process
     main(hp)
 
 if __name__ == '__main__':
+    multiprocessing.set_start_method('spawn')
     cleanup()
 
     now = datetime.now()
-    run_in_parallel = True
+    run_in_parallel = False
 
     if run_in_parallel:
+        manager = multiprocessing.Manager()
+        queue = manager.Queue()
+
+        listener = multiprocessing.Process(target=listener_process, args=(queue,))
+        listener.start()
+        
         hp_sets = [Hyperparameters(i, now) for i in range(2)]
         hp_sets[0].hidden_dim = 23
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            executor.map(run_job, hp_sets)
-            executor.shutdown(wait=True)
+            futures = [executor.submit(run_job, hp, queue) for hp in hp_sets]
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+
+        listener.terminate()
     else:
         hp = Hyperparameters(0, now)
-        setup_logging(hp)
+        setup_logging(hp) #ing for sINGle
         hp.spit = logging.info
         main(hp)
 
