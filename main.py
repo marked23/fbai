@@ -5,7 +5,6 @@ import logging.handlers
 import concurrent.futures
 import multiprocessing
 from datetime import datetime
-import time
 from typing import Callable, NamedTuple, Optional, Tuple, Union
 import torch
 from torch import Size, nn
@@ -23,53 +22,7 @@ import random
 import json
 import os
 import matplotlib.pyplot as plt
-import seaborn as sns
-
-# for single process logging
-def setup_logging(hp: Hyperparameters):
-    log_format = f'[{hp.parameter_set_id}] %(message)s'
-    logging.basicConfig(
-        level=logging.INFO,
-        format=log_format,
-        handlers=[
-            logging.FileHandler("parallel_execution.log"),
-            logging.StreamHandler()
-        ]
-    )
-
-# for multi process logging
-def setup_logger(hp: Hyperparameters, queue):
-    log_format = f'[{hp.parameter_set_id}] %(message)s'
-    queue_handler = logging.handlers.QueueHandler(queue)
-    formatter = logging.Formatter(log_format)
-    queue_handler.setFormatter(formatter)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(queue_handler)
-    hp.spit = logging.info
-
-def listener_configurer():
-    log_format = f'%(message)s'
-    logging.basicConfig(
-        level=logging.INFO,
-        format=log_format,
-        handlers=[
-            logging.FileHandler("parallel_execution.log"),
-            logging.StreamHandler()
-        ]
-    )
-
-def listener_process(queue):
-    listener_configurer()
-    listener = logging.handlers.QueueListener(queue, *logging.getLogger().handlers)
-    listener.start()
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        listener.stop()
+from lloging import setup_logging, setup_logger, listener_process
 
 def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimizer, hp: Hyperparameters) -> Tuple[torch.nn.Module, float]:
     model.train()
@@ -163,7 +116,7 @@ def main(hp: Hyperparameters):
         else:
             star = " "
             pretest_report = ""
-        star = "*" if val_correct >= 180 else " "
+
         hp.spit(f"Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate} {pretest_report}")
 
         if hp.save_checkpoints:
@@ -206,17 +159,20 @@ if __name__ == '__main__':
     cleanup()
 
     now = datetime.now()
-    run_in_parallel = False
+    run_in_parallel = True
 
     if run_in_parallel:
         manager = multiprocessing.Manager()
         queue = manager.Queue()
 
-        listener = multiprocessing.Process(target=listener_process, args=(queue,))
-        listener.start()
-        
         hp_sets = [Hyperparameters(i, now) for i in range(2)]
         hp_sets[0].hidden_dim = 23
+
+        run_path = hp_sets[0].run_path
+        os.makedirs(run_path, exist_ok=True)
+        listener = multiprocessing.Process(target=listener_process, args=(queue, run_path, ))
+        listener.start()
+        
         with concurrent.futures.ProcessPoolExecutor() as executor:
             futures = [executor.submit(run_job, hp, queue) for hp in hp_sets]
             for future in concurrent.futures.as_completed(futures):

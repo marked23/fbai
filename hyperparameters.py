@@ -31,20 +31,22 @@ class Hyperparameters:
     epochs:                        int                      = 20000
     seed:                          int                      = 42
     patience_delay:                float                    = 0.75
+    save_checkpoints:              bool                     = False
+    spit:                          callable                 = print
     max_patience:                  int                      # calculated
     epochs_before_patience:        int                      # calculated
     device:                        torch.device             # calculated
-    save_checkpoints:              bool                     = False
     str_run_date:                  str                      # calculated
     run_path:                      str                      # calculated
+    process_path:                  str                      # calculated
     checkpoint_path:               str                      # calculated
-    spit:                          callable                 = print
     
     def __init__(self, parameter_set_id: int, run_date: datetime, spit: callable = print):
         self.parameter_set_id = parameter_set_id
         self.str_run_date = run_date.strftime("%Y-%m-%d_%H_%M_%S")
-        self.run_path = f"./results/{self.str_run_date}/{self.parameter_set_id}"
-        self.checkpoint_path = f"{self.run_path}/checkpoints"
+        self.run_path = f"./results/{self.str_run_date}"
+        self.process_path = f"{self.run_path}/{self.parameter_set_id}"
+        self.checkpoint_path = f"{self.process_path}/checkpoints"
         self.epochs_before_patience = int(self.epochs * self.patience_delay)
         self.max_patience = self.epochs // 5
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
