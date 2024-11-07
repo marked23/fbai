@@ -165,11 +165,24 @@ if __name__ == '__main__':
         manager = multiprocessing.Manager()
         queue = manager.Queue()
 
-        hp_sets = [Hyperparameters(i, now) for i in range(2)]
-        hp_sets[0].hidden_dim = 23
+
+        hp_sets = [Hyperparameters(i, now) for i in range(30)]
+        for i, hp in enumerate(hp_sets):
+            hp.hidden_dim = i + 14
 
         run_path = hp_sets[0].run_path
         os.makedirs(run_path, exist_ok=True)
+
+        for hp in hp_sets:
+            os.makedirs(hp.process_path, exist_ok=True)
+            hp_file = os.path.join(hp.process_path, 'hyperparameters.json')
+            with open(hp_file, 'w') as f:
+                f.write(str(hp))
+
+        if hp_sets[0].save_checkpoints:
+            for checkpoint_path in [hp.checkpoint_path for hp in hp_sets]:
+                os.makedirs(checkpoint_path, exist_ok=True)
+
         listener = multiprocessing.Process(target=listener_process, args=(queue, run_path, ))
         listener.start()
         
@@ -191,7 +204,35 @@ if __name__ == '__main__':
     cleanup()
 
 
+# # perturbations.py
+# from dataclasses import dataclass
+# from typing import Union, List
 
+# @dataclass
+# class PerturbRule:
+#     param_name: str
+#     start: Union[int, float]
+#     step: Union[int, float] = 1
+#     multiply: bool = False
+
+# def apply_perturbations(hp_sets: List, rules: List[PerturbRule]):
+#     for i, hp in enumerate(hp_sets):
+#         for rule in rules:
+#             if rule.multiply:
+#                 value = rule.start * (rule.step ** i)
+#             else:
+#                 value = rule.start + (rule.step * i)
+#             setattr(hp, rule.param_name, value)
+
+# # Usage:
+# rules = [
+#     PerturbRule("hidden_dim", 14, 1),              # Linear: 14,15,16...
+#     PerturbRule("learning_rate", 0.001, 2, True),  # Geometric: 0.001,0.002,0.004...
+#     PerturbRule("drop", 0.1, 0.05)                 # Linear: 0.1,0.15,0.2...
+# ]
+
+# hp_sets = [Hyperparameters(i, now) for i in range(20)]
+# apply_perturbations(hp_sets, rules)
 
 
 
