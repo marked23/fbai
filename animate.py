@@ -55,34 +55,73 @@ def create_weight_animation(layer_name, checkpoint_files, model, step: int, vmin
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     make_it = True
+    previous_data = None
     
+    # Calculate frame indices including final checkpoint
+    regular_frames = list(range(0, len(checkpoint_files)-1, step))
+    if regular_frames[-1] != len(checkpoint_files)-1:
+        frame_indices = regular_frames + [len(checkpoint_files)-1]
+    else:
+        frame_indices = regular_frames
+
     def animate(frame_idx):
-        nonlocal make_it
+        nonlocal make_it, previous_data
         ax.clear()
         
-        # Calculate actual checkpoint index based on step
-        checkpoint_idx = frame_idx * step
+        checkpoint_idx = frame_indices[frame_idx]
         checkpoint = torch.load(checkpoint_files[checkpoint_idx], map_location=device, weights_only=True)
         model.load_state_dict(checkpoint)
         
         for name, param in model.named_parameters():
             if name == layer_name:
-                data = param.detach().cpu().numpy().T
-                sns.heatmap(data, annot=False, cmap='viridis', ax=ax, 
-                          vmin=vmin, vmax=vmax, cbar=make_it)
+                current_data = param.detach().cpu().numpy().T
+                
+                # Calculate changes from previous frame
+                if previous_data is not None:
+                    changes = current_data - previous_data
+                    
+                    significant_changes = np.abs(changes) > 0.05
+
+                    sns.heatmap(current_data, annot=False, 
+                              cmap='RdBu_r',  # Red-Blue diverging colormap
+                              center=0,       # Center the colormap at 0
+                              ax=ax, 
+                              vmin=vmin, vmax=vmax, 
+                              cbar=make_it)
+
+                    # Find and highlight zero rows
+                    zero_rows = np.all(np.abs(current_data) < 1e-5, axis=1)
+                    for i in range(len(zero_rows)):
+                        if zero_rows[i]:
+                            ax.axhline(y=i+0.5, color='yellow', linewidth=6) 
+
+                    # Highlight cells with significant changes
+                    for i in range(changes.shape[0]):
+                        for j in range(changes.shape[1]):
+                            if significant_changes[i,j]:
+                                # Place dot at center of cell
+                                ax.plot(j + 0.5, i + 0.5, 'k.', markersize=1, alpha=0.3)  # 'k' means black, '.' means dot
+                
+                else:
+                    sns.heatmap(current_data, annot=False, 
+                              cmap='RdBu_r', center=0,
+                              ax=ax, vmin=vmin, vmax=vmax, 
+                              cbar=make_it)
+                
+                previous_data = current_data.copy()
                 
                 if make_it:
                     make_it = False
                     
-                ax.set_title(f'Heatmap of {name} - Epoch {checkpoint_idx + 1}')
+                ax.set_title(f'Heatmap of {name} - Epoch {checkpoint_idx + 1}/{len(checkpoint_files)}')
                 ax.set_xlabel('Output Nodes')
                 ax.set_ylabel('Input Nodes')
                 break
-                
+
     num_frames = len(checkpoint_files) // step
-    ani = FuncAnimation(fig, animate, frames=num_frames, repeat=False)
+    ani = FuncAnimation(fig, animate, frames=len(frame_indices), repeat=False)
     writer = FFMpegWriter(
-        fps=60,
+        fps=15,
         bitrate=3000,
         codec='h264_nvenc',
         extra_args=[
