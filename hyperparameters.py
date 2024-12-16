@@ -2,10 +2,23 @@ import torch
 from torch import nn
 import datetime
 import json
+from datetime import datetime
+from typing import Dict, Any
+
+
+class HyperparameterError(Exception):
+    """Custom exception for hyperparameter loading errors"""
+    pass
 
 class Hyperparameters:
     parameter_set_id:              int                      = 0
 
+    criterion_map = {
+        'CrossEntropyLoss': nn.CrossEntropyLoss,
+        'MSELoss': nn.MSELoss,
+        'BCELoss': nn.BCELoss
+    }
+    
 # for Model
     input_dim:                     int                      = 10
     output_dim:                    int                      = 4
@@ -32,7 +45,7 @@ class Hyperparameters:
     epochs:                        int                      = 20000
     seed:                          int                      = 42
     patience_delay:                float                    = 0.75
-    save_checkpoints:              bool                     = False
+    save_checkpoints:              bool                     = True
     spit:                          callable                 = print
     max_patience:                  int                      # calculated
     epochs_before_patience:        int                      # calculated
@@ -42,9 +55,9 @@ class Hyperparameters:
     process_path:                  str                      # calculated
     checkpoint_path:               str                      # calculated
     
-    def __init__(self, parameter_set_id: int, run_date: datetime, spit: callable = print):
+    def __init__(self, parameter_set_id: int = -1, run_date: datetime = None, spit: callable = print):
         self.parameter_set_id       = parameter_set_id
-        self.str_run_date           = run_date.strftime("%Y-%m-%d_%H_%M_%S")
+        self.str_run_date           = (run_date or datetime.now()).strftime("%Y-%m-%d_%H_%M_%S")
         self.run_path               = f"./results/{self.str_run_date}"
         self.process_path           = f"{self.run_path}/{self.parameter_set_id}"
         self.checkpoint_path        = f"{self.process_path}/checkpoints"
@@ -85,3 +98,30 @@ class Hyperparameters:
         except Exception as e:
             print(f"Error in __str__: {e}")
             return str(e)
+
+
+    @classmethod
+    def from_json(cls, json_path: str) -> 'Hyperparameters':
+        try:
+            with open(json_path, 'r') as f:
+                data: Dict[str, Any] = json.load(f)
+                
+            hp = cls()
+            
+            for key, value in data.items():
+                if key == 'timestamp':
+                    value = datetime.fromisoformat(value)
+                elif key == 'criterion':
+                    if value not in cls.criterion_map:
+                        raise HyperparameterError(f"Unknown criterion: {value}")
+                    value = cls.criterion_map[value]
+                elif key == 'spit':
+                    pass
+                setattr(hp, key, value)
+                    
+            return hp
+            
+        except FileNotFoundError:
+            raise HyperparameterError(f"Hyperparameter file not found: {json_path}")
+        except json.JSONDecodeError:
+            raise HyperparameterError(f"Invalid JSON in file: {json_path}")

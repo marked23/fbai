@@ -1,6 +1,6 @@
 import torch
 import matplotlib
-matplotlib.use('Qt5Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.animation import FuncAnimation, FFMpegWriter
@@ -12,23 +12,9 @@ import numpy as np
 from hyperparameters import Hyperparameters 
 import datetime
 
-device = 'cpu' #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-# reload hp from json file
-hp = Hyperparameters(1, datetime.datetime.now())
-hp.input_dim = 10
-hp.output_dim = 4
-hp.hidden_dim = 31
-hp.parameter_set_id = 1
-
-# Instantiate the model and move to device
-model = Model(hp).to(device)
-
-
-run_path = "./results/2024-11-06_21_38_40"
-process_path = f"{run_path}/{hp.parameter_set_id}"
-checkpoint_folder = f"{process_path}/checkpoints"
-checkpoint_files = sorted([os.path.join(checkpoint_folder, f) for f in os.listdir(checkpoint_folder) if f.endswith(".pth")])
+# leave as 'cpu' 
+# because matplotlib does not use the GPU
+device = 'cpu'  #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Set up the figure for plotting
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -157,11 +143,19 @@ def parse_args() -> Namespace:
     parser.add_argument('--all', action='store_true', help='Generate animations for all layers')
     parser.add_argument('--layer', type=int, help='Number of specific layer to animate')
     parser.add_argument('--step', type=int, default=1, help='Number of checkpoints to skip between frames')
+    parser.add_argument('process_path', type=str, help='Path to process directory (e.g. ./results/2024-03-14_16_16_28/1)')
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    process_path = args.process_path
+    
+    checkpoint_folder = f"{process_path}/checkpoints"
+    checkpoint_files = sorted([os.path.join(checkpoint_folder, f) for f in os.listdir(checkpoint_folder) if f.endswith(".pth")])
+    hp = Hyperparameters.from_json(f"{process_path}/hyperparameters.json")
+    model = Model(hp).to(device)
+        
     weight_layers = get_weight_layers(model)
 
 
