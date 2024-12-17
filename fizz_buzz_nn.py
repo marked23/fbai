@@ -113,3 +113,20 @@ class ImprovedModel(torch.nn.Module):
         
         x = self.layer3(x)
         return x
+    
+class ClaudesModel(torch.nn.Module):
+    def __init__(self, hp: Hyperparameters):
+        super(ClaudesModel, self).__init__()
+        self.network = torch.nn.Sequential(
+            # Input layer: 10 binary digits
+            torch.nn.Linear(10, hp.hidden_dim),
+            torch.nn.ReLU(),
+            # Hidden layer
+            torch.nn.Linear(hp.hidden_dim, hp.hidden_dim),
+            torch.nn.ReLU(),
+            # Output layer: 4 classes (number, fizz, buzz, fizzbuzz)
+            torch.nn.Linear(hp.hidden_dim, 4)
+        )
+    
+    def forward(self, x):
+        return self.network(x)

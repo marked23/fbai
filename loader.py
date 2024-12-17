@@ -24,8 +24,8 @@ class Loader:
         train_labels = training_dataset[:][1].repeat(hp.input_duplicates)
         training_dataset = TensorDataset(train_features, train_labels)
 
-        training_loader = DataLoader(training_dataset, batch_size=256, shuffle=True, num_workers=0, pin_memory=True)
-        validation_loader = DataLoader(validation_dataset, batch_size=256, shuffle=False, num_workers=0)           
+        training_loader = DataLoader(training_dataset, batch_size=hp.train_batch_size, shuffle=True, num_workers=0, pin_memory=hp.device.type == 'cpu')
+        validation_loader = DataLoader(validation_dataset, batch_size=hp.val_batch_size, shuffle=False, num_workers=0, pin_memory=hp.device.type == 'cpu')           
 
         return training_loader, validation_loader
 
@@ -36,6 +36,6 @@ class Loader:
         testing_features = torch.stack([features for _, features, _     in testing_data]).to(hp.device)
         testing_labels = torch.tensor( [label    for _,        _, label in testing_data]).to(hp.device)
         testing_dataset = TensorDataset(testing_features, testing_labels)
-        testing_loader = DataLoader(testing_dataset, batch_size=256, shuffle=False)
+        testing_loader = DataLoader(testing_dataset, batch_size=hp.test_batch_size, shuffle=False)
         
         return testing_loader

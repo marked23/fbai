@@ -96,7 +96,7 @@ def create_model(hp):
     return model_class(hp).to(hp.device)
 
 def main(rank, hp_sets: list[Hyperparameters]):
-    hp = hp_sets[rank]
+    hp: Hyperparameters = hp_sets[rank]
     setup(rank)
     set_seed(hp.seed)
     training_loader, validation_loader = loader.create_training_loader(hp)
@@ -112,16 +112,32 @@ def main(rank, hp_sets: list[Hyperparameters]):
     if hp.save_checkpoints:
         os.makedirs(hp.checkpoint_path, exist_ok=True)
 
-    model = create_model(hp)
-    # model = DeepModel(hp).to(hp.device)
+    model = create_model(hp).to(hp.device)
     optimizer = optim.Adam(model.parameters(), lr=hp.initial_learning_rate, weight_decay=hp.weight_decay)
 
     for epoch in range(hp.epochs+1):
-        model, train_loss = train(model, training_loader, optimizer, hp)
+        model.train()
+        train_loss = 0.0
+        for features, labels in training_loader:
+            optimizer.zero_grad()
+            output = model(features)
+            loss = hp.criterion(output, labels)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+        train_loss = (train_loss / len(training_loader)) / hp.input_duplicates
         train_losses.append(train_loss)
 
-        val_correct, val_loss = test(model, validation_loader, hp)
-        val_losses.append(val_loss)
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        with torch.no_grad():
+            for features, labels in validation_loader:
+                output = model(features)
+                loss = hp.criterion(output, labels)
+                val_loss += loss.item()
+                val_correct += (output.argmax(dim=1) == labels).sum().item()
+        val_losses.append(val_loss / len(validation_loader))
         val_total = len(validation_loader.dataset)
 
         learning_rate = optimizer.param_groups[0]['lr']
@@ -131,7 +147,7 @@ def main(rank, hp_sets: list[Hyperparameters]):
             pretest_correct, _ = test(model, testing_loader, hp)
             pretest_report = f"p: {pretest_correct:>3} / 100"
             if pretest_correct == 100:
-                hp.spit(f"[{rank:>4}]Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate:.5f} {pretest_report}")
+                hp.spit(f"[{rank:>4}]Epoch {epoch:>5} t: {train_loss:>2.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate:.5f} {pretest_report}")
                 break
         else:
             star = " "
@@ -165,29 +181,40 @@ def main(rank, hp_sets: list[Hyperparameters]):
     if test_correct == 100:
         os.makedirs(hp.run_path, exist_ok=True)
         torch.save(obj=model.state_dict(), f=f'{hp.process_path}/model.pth')
+        
+        print(f"[{rank:>4}] {hp.perturb_info}")
+        
+        with open(f'{hp.run_path}/winners.txt', 'a') as f:
+            f.write(f"Rank: {rank:>4} Epoch: {epoch:>5} Info: {hp.perturb_info}\n")
         hp.spit("WIN!... Model saved")
     else:
         hp.spit("meh")
 
     cleanup()
 
+
 if __name__ == '__main__':
-    world_size = 20  # Number of parallel instances
+    world_size = 1  # Number of parallel instances
     now = datetime.now()
     hp_sets = [Hyperparameters(i, now) for i in range(world_size+1)]
 
-    models = ["fizz_buzz_nn.ImprovedModel", 
-              "fizz_buzz_nn.DeepModel", 
-              "fizz_buzz_nn.WideModel", 
-              "fizz_buzz_nn.PyramidModel"]    
+    # models = ["fizz_buzz_nn.ImprovedModel", 
+    #           "fizz_buzz_nn.DeepModel", 
+    #           "fizz_buzz_nn.WideModel", 
+    #           "fizz_buzz_nn.PyramidModel"]    
+    
+    models = ["fizz_buzz_nn.ClaudesModel"]
     
     # Define perturbation rules
     rules = [
-        # PerturbRule("hidden_dim", 16, 1),                        # Linear: 14,15,16...
-        PerturbRule("initial_learning_rate", 0.001, 0.0003),  # Geometric: 0.001,0.002,0.004...
-        # PerturbRule("drop", 0.01, 0.02)                         # Linear: 0.1,0.15,0.2...
-        PerturbRule("model_class_name", array=models, each=1),
-        PerturbRule("input_duplicates", start=1, step=1)
+        PerturbRule("initial_learning_rate", start=0.0097, step=0.0),
+        # PerturbRule("drop", 0.01, 0.02),                     
+        # PerturbRule("model_class_name", array=models, each=1),
+        # PerturbRule("train_batch_size", start=256, step=0),
+        # PerturbRule("val_batch_size"  , start=256, step=0),
+        # PerturbRule("test_batch_size" , start=256, step=0),
+        PerturbRule("input_duplicates", start=63 , step=0),
+        PerturbRule("hidden_dim"      , start=430, step=0),
     ]
     
     apply_perturbations(hp_sets, rules)

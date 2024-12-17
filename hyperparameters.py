@@ -19,12 +19,12 @@ class Hyperparameters:
     drop:                          float                    = 0.2
 
 # for Optimizer 
-    initial_learning_rate:         float                    = 0.004
+    initial_learning_rate:         float                    = 0.0063
     weight_decay:                  float                    = 1e-5
 
 # criterion
     criterion:                     torch.nn.Module          = torch.nn.CrossEntropyLoss()
-    model_class_name:              str                      = "fizz_buzz_nn.ImprovedModel"
+    model_class_name:              str                      = "fizz_buzz_nn.ClaudesModel"
 
 # # for StepLR
 #     step_size:                     int                      = 1000
@@ -39,9 +39,13 @@ class Hyperparameters:
     epochs:                        int                      = 20000
     seed:                          int                      = 42
     patience_delay:                float                    = 0.75
-    save_checkpoints:              bool                     = True
+    save_checkpoints:              bool                     = False
     spit:                          callable                 = print
     input_duplicates:              int                      = 1
+    train_batch_size:              int                      = 256
+    val_batch_size:                int                      = 256
+    test_batch_size:               int                      = 256
+    perturb_info:                  str                      = ""
     max_patience:                  int                      # calculated
     epochs_before_patience:        int                      # calculated
     device:                        torch.device             # calculated

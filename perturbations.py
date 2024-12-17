@@ -11,7 +11,8 @@ class PerturbRule:
     array: Optional[List[str]] = field(default=None)
     each: int = 1
 
-def print_perturbation_info(hp_sets: List[Hyperparameters], rules: List[PerturbRule]):
+def describe_perturbation_scenario(hp_sets: List[Hyperparameters], rules: List[PerturbRule]) -> List[str]:
+    output_lines = []
     for rule in rules:
         values = []
         for i in range(len(hp_sets)):
@@ -25,14 +26,21 @@ def print_perturbation_info(hp_sets: List[Hyperparameters], rules: List[PerturbR
             values.append(value)
         
         if rule.array:
-            print(f"[{0:>4}] {rule.param_name}: array={rule.array}, each={rule.each}")
+            output_lines.append(f"[{0:>4}] {rule.param_name}: array={rule.array}, each={rule.each}")
         else:
-            print(f"[{0:>4}] {rule.param_name}: {values[0]:.3f}, {values[1]:.3f}, ..., {values[-1]:.3f}")
+            output_lines.append(f"[{0:>4}] {rule.param_name}: {values[0]:.3f}, {values[1]:.3f}, ..., {values[-1]:.3f}")
+    
+    return output_lines
+
 
 
 def apply_perturbations(hp_sets: List[Hyperparameters], rules: List[PerturbRule]):
-    print_perturbation_info(hp_sets, rules)
+    info = describe_perturbation_scenario(hp_sets, rules)
+    info.sort()
+    info_string = "\n".join(info)
+    print(info_string)
     for i, hp in enumerate(hp_sets):
+        rule_info = []
         for rule in rules:
             if rule.array:
                 index = (i // rule.each) % len(rule.array)
@@ -42,7 +50,10 @@ def apply_perturbations(hp_sets: List[Hyperparameters], rules: List[PerturbRule]
             else:
                 value = rule.start + (rule.step * i)
             setattr(hp, rule.param_name, value)
-
+            rule_info.append(f"{rule.param_name} = {value}")
+        hp.perturb_info = ", ".join(rule_info)
+        print(f"[{i:>4}] {hp.perturb_info}")
+        
 # Usage example:
 # rules = [
 #     PerturbRule("hidden_dim", 14, 1),              # Linear: 14,15,16...
