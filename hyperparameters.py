@@ -1,9 +1,8 @@
 import torch
-from torch import nn
 import datetime
 import json
 from datetime import datetime
-from typing import Dict, Any
+# from typing import Dict, Any
 
 
 class HyperparameterError(Exception):
@@ -13,12 +12,6 @@ class HyperparameterError(Exception):
 class Hyperparameters:
     parameter_set_id:              int                      = 0
 
-    criterion_map = {
-        'CrossEntropyLoss': nn.CrossEntropyLoss,
-        'MSELoss': nn.MSELoss,
-        'BCELoss': nn.BCELoss
-    }
-    
 # for Model
     input_dim:                     int                      = 10
     output_dim:                    int                      = 4
@@ -30,7 +23,8 @@ class Hyperparameters:
     weight_decay:                  float                    = 1e-5
 
 # criterion
-    criterion:                     nn.Module                = nn.CrossEntropyLoss()
+    criterion:                     torch.nn.Module          = torch.nn.CrossEntropyLoss()
+    model_class_name:              str                      = "fizz_buzz_nn.ImprovedModel"
 
 # # for StepLR
 #     step_size:                     int                      = 1000
@@ -47,6 +41,7 @@ class Hyperparameters:
     patience_delay:                float                    = 0.75
     save_checkpoints:              bool                     = True
     spit:                          callable                 = print
+    input_duplicates:              int                      = 1
     max_patience:                  int                      # calculated
     epochs_before_patience:        int                      # calculated
     device:                        torch.device             # calculated
@@ -66,15 +61,39 @@ class Hyperparameters:
         self.device                 = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.spit                   = spit
 
+# def __str__(self):
+#     attrs = vars(self).copy()
+#     print(f"enter") 
+#     # Handle special conversions
+#     if 'datetime' in attrs:
+#         attrs['str_run_date'] = attrs['datetime'].strftime("%Y-%m-%d_%H_%M_%S")
+#         del attrs['datetime']
+    
+#     if 'criterion' in attrs and hasattr(attrs['criterion'], '__name__'):
+#         attrs['criterion'] = attrs['criterion'].__name__
+    
+#     if 'device' in attrs:
+#         attrs['device'] = str(attrs['device'])
+    
+#     # Convert any function objects to their names
+#     for key, value in attrs.items():
+#         if callable(value):
+#             attrs[key] = f"<function {value.__name__}>"
+    
+#     return json.dumps(attrs, indent=4)
+
     def __str__(self):
         def serialize_value(v):
             try:
-                if isinstance(v, nn.Module):
+                if isinstance(v, torch.nn.Module):
+                    # print(v.__class__.__name__)
                     return v.__class__.__name__
                 elif isinstance(v, torch.device):
+                    # print(str(v))
                     return str(v)
                 elif callable(v):
-                    return f"<function {v.__name__}>" if hasattr(v, '__name__') else str(v)
+                    # print(f"<function {v.__name__}>")
+                    return f"<function {v.__name__}>" ##if hasattr(v, '__name__') else str(v)
                 return v
             except Exception as e:
                 print(f"Error serializing {v}: {e}")
@@ -84,29 +103,43 @@ class Hyperparameters:
             # Modified filter to include nn.Module
             class_vars = {
                 k: v for k, v in vars(self.__class__).items() 
-                if not k.startswith('__') and (not callable(v) or isinstance(v, nn.Module))
+                if not k.startswith('__') and (not callable(v) or isinstance(v, torch.nn.Module) or isinstance(v, torch.device))
             }
             
-            print(f"Criterion type: {type(self.criterion)}")  # Debug
+            # print(f"Criterion type: {type(self.criterion)}")  # Debug
             all_vars = {**class_vars, **self.__dict__}
             
-            serializable_dict = {
-                k: serialize_value(v)
-                for k, v in all_vars.items()
-            }
+            serializable_dict = {}
+            for k, v in all_vars.items():
+                try:
+                    serialized_value = serialize_value(v)
+                    # print(f"Serialized value: {serialized_value}")
+                    serializable_dict[k] = serialized_value
+                except Exception as e:
+                    print(f"Error serializing key {k}: {e}")
+                    serializable_dict[k] = f"<unserializable {type(v).__name__}>"
+
             return json.dumps(serializable_dict, indent=4)
+        
         except Exception as e:
-            print(f"Error in __str__: {e}")
+            print(f"Error in __str__: {e} line: {e.__traceback__.tb_lineno}")
             return str(e)
 
+class HyperparametersLoader:
 
-    @classmethod
+    criterion_map = {
+        'CrossEntropyLoss': torch.nn.CrossEntropyLoss,
+        'MSELoss': torch.nn.MSELoss,
+        'BCELoss': torch.nn.BCELoss
+    }
+    
+
     def from_json(cls, json_path: str) -> 'Hyperparameters':
         try:
             with open(json_path, 'r') as f:
-                data: Dict[str, Any] = json.load(f)
+                data = json.load(f)
                 
-            hp = cls()
+            hp = Hyperparameters()
             
             for key, value in data.items():
                 if key == 'timestamp':

@@ -1,30 +1,53 @@
+# 2. Reorder imports to handle dependencies
 from __future__ import annotations
 
-import signal
-import sys
+# Standard library imports first
+import gc
+import json
 import logging
 import logging.handlers
-import concurrent.futures
-import multiprocessing
+import os
+import random
+import signal
+import sys
+import time
 from datetime import datetime
 from typing import Callable, NamedTuple, Optional, Tuple, Union
+
+# Third-party imports
+import numpy as np
 import torch
-from torch import Size, nn
+import torch.multiprocessing as mp
 import torch.optim as optim
+from torch import Size, nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-import gc
 import matplotlib.pyplot as plt
-from fizz_buzz_nn import Model
+
+# Local imports
+import fizz_buzz_nn
+from fizz_buzz_nn import Model, WideModel, DeepModel, PyramidModel, ImprovedModel
 from data_sample import DataSample
 from hyperparameters import Hyperparameters
 from loader import Loader as loader
-import numpy as np
-import random
-import json
-import os
-import matplotlib.pyplot as plt
 from lloging import setup_logging, setup_logger, listener_process
+from perturbations import apply_perturbations, PerturbRule
+
+def setup(rank):
+    torch.manual_seed(42)
+
+def cleanup():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+    
+def save_hyperparameters(hp: Hyperparameters):
+    os.makedirs(hp.process_path, exist_ok=True)
+    with open(f"{hp.process_path}/hyperparameters.json", "w") as f:
+        f.write(str(hp))
+    # with open(f"{hp.process_path}/hyperparameters_dump.json", "w") as d:
+    #     json.dump(hp.__dict__, d, indent=4)
+          
 
 def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimizer, hp: Hyperparameters) -> Tuple[torch.nn.Module, float]:
     model.train()
@@ -42,29 +65,21 @@ def train(model: nn.Module, training_loader: DataLoader, optimizer: optim.Optimi
     avg_loss = total_loss / len(training_loader.dataset)
     return model, avg_loss
 
-
 def test(model: nn.Module, data_loader: DataLoader, hp: Hyperparameters) -> Tuple[int, float]:
     model.eval()
     total_loss = 0
     num_correct = 0
-    crierion = hp.criterion
+    criterion = hp.criterion
 
     with torch.no_grad():
         for features, labels in data_loader:
             predictions = model(features)
-            loss = crierion(predictions, labels)
+            loss = criterion(predictions, labels)
             total_loss += loss.item()
             num_correct += (predictions.argmax(dim=1) == labels).sum().item()
 
     avg_loss = total_loss / len(data_loader.dataset) 
     return num_correct, avg_loss
-
-
-def cleanup():
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    gc.collect()
-
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -74,8 +89,15 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def create_model(hp):
+    module_name, class_name = hp.model_class_name.split('.')
+    module = globals()[module_name]
+    model_class = getattr(module, class_name)
+    return model_class(hp).to(hp.device)
 
-def main(hp: Hyperparameters):
+def main(rank, hp_sets: list[Hyperparameters]):
+    hp = hp_sets[rank]
+    setup(rank)
     set_seed(hp.seed)
     training_loader, validation_loader = loader.create_training_loader(hp)
     testing_loader  = loader.create_testing_loader(hp)
@@ -87,16 +109,14 @@ def main(hp: Hyperparameters):
     best_score = 0.0
     patience = hp.max_patience
 
-    
     if hp.save_checkpoints:
         os.makedirs(hp.checkpoint_path, exist_ok=True)
 
-    # create an empty model and send it to the device
-    model = Model(hp).to(hp.device)
+    model = create_model(hp)
+    # model = DeepModel(hp).to(hp.device)
     optimizer = optim.Adam(model.parameters(), lr=hp.initial_learning_rate, weight_decay=hp.weight_decay)
 
     for epoch in range(hp.epochs+1):
-
         model, train_loss = train(model, training_loader, optimizer, hp)
         train_losses.append(train_loss)
 
@@ -106,20 +126,18 @@ def main(hp: Hyperparameters):
 
         learning_rate = optimizer.param_groups[0]['lr']
 
-        # scheduler.step()
-
         if val_correct >= 175:
             star = "*"
             pretest_correct, _ = test(model, testing_loader, hp)
             pretest_report = f"p: {pretest_correct:>3} / 100"
             if pretest_correct == 100:
-                hp.spit(f"Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate} {pretest_report}")
+                hp.spit(f"[{rank:>4}]Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate:.5f} {pretest_report}")
                 break
         else:
             star = " "
             pretest_report = ""
 
-        hp.spit(f"Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate} {pretest_report}")
+        hp.spit(f"[{rank:>4}]Epoch {epoch:>5} t: {train_loss:>.7f} v: {val_loss:>.7f} c:{val_correct:>4}/{val_total:<4}{star} lr:{learning_rate:.5f} {pretest_report}")
 
         if hp.save_checkpoints:
             torch.save(obj=model.state_dict(), f=f'{hp.checkpoint_path}/model_{epoch:06}.pth')
@@ -138,8 +156,7 @@ def main(hp: Hyperparameters):
         if patience == 0:
             hp.spit("Patience has run out")
             break
-        
-    # Final test evaluation
+
     test_correct, test_loss = test(model, testing_loader, hp)
     test_losses.append(test_loss)
     hp.spit("\nFinal test evaluation")
@@ -152,99 +169,31 @@ def main(hp: Hyperparameters):
     else:
         hp.spit("meh")
 
-def run_job(hp, queue):
-    setup_logger(hp, queue) #ger for multi process
-    main(hp)
-
-def signal_handler(signum, frame):
-    print("\nCaught Ctrl+C, cleaning up...")
-    # Terminate any running processes
-    for process in multiprocessing.active_children():
-        process.terminate()
-    # Clean up resources
     cleanup()
-    sys.exit(0)
-
 
 if __name__ == '__main__':
-    multiprocessing.set_start_method('spawn')
-    cleanup()
-
+    world_size = 20  # Number of parallel instances
     now = datetime.now()
-    run_in_parallel = True
+    hp_sets = [Hyperparameters(i, now) for i in range(world_size+1)]
 
-    if run_in_parallel:
-        manager = multiprocessing.Manager()
-        queue = manager.Queue()
-
-
-        hp_sets = [Hyperparameters(i, now) for i in range(5)]
-        for i, hp in enumerate(hp_sets):
-            hp.hidden_dim = i + 30
-
-        run_path = hp_sets[0].run_path
-        os.makedirs(run_path, exist_ok=True)
-
-        for hp in hp_sets:
-            os.makedirs(hp.process_path, exist_ok=True)
-            hp_file = os.path.join(hp.process_path, 'hyperparameters.json')
-            with open(hp_file, 'w') as f:
-                f.write(str(hp))
-
-        if hp_sets[0].save_checkpoints:
-            for checkpoint_path in [hp.checkpoint_path for hp in hp_sets]:
-                os.makedirs(checkpoint_path, exist_ok=True)
-
-        listener = multiprocessing.Process(target=listener_process, args=(queue, run_path, ))
-        listener.start()
+    models = ["fizz_buzz_nn.ImprovedModel", 
+              "fizz_buzz_nn.DeepModel", 
+              "fizz_buzz_nn.WideModel", 
+              "fizz_buzz_nn.PyramidModel"]    
+    
+    # Define perturbation rules
+    rules = [
+        # PerturbRule("hidden_dim", 16, 1),                        # Linear: 14,15,16...
+        PerturbRule("initial_learning_rate", 0.001, 0.0003),  # Geometric: 0.001,0.002,0.004...
+        # PerturbRule("drop", 0.01, 0.02)                         # Linear: 0.1,0.15,0.2...
+        PerturbRule("model_class_name", array=models, each=1),
+        PerturbRule("input_duplicates", start=1, step=1)
+    ]
+    
+    apply_perturbations(hp_sets, rules)
+    for hp in hp_sets:
+        save_hyperparameters(hp)
         
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(run_job, hp, queue) for hp in hp_sets]
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"An error occurred: {e}")
-
-        listener.terminate()
-    else:
-        hp = Hyperparameters(0, now)
-        setup_logging(hp) #ing for sINGle
-        hp.spit = logging.info
-        main(hp)
-
-    cleanup()
-
-
-# # perturbations.py
-# from dataclasses import dataclass
-# from typing import Union, List
-
-# @dataclass
-# class PerturbRule:
-#     param_name: str
-#     start: Union[int, float]
-#     step: Union[int, float] = 1
-#     multiply: bool = False
-
-# def apply_perturbations(hp_sets: List, rules: List[PerturbRule]):
-#     for i, hp in enumerate(hp_sets):
-#         for rule in rules:
-#             if rule.multiply:
-#                 value = rule.start * (rule.step ** i)
-#             else:
-#                 value = rule.start + (rule.step * i)
-#             setattr(hp, rule.param_name, value)
-
-# # Usage:
-# rules = [
-#     PerturbRule("hidden_dim", 14, 1),              # Linear: 14,15,16...
-#     PerturbRule("learning_rate", 0.001, 2, True),  # Geometric: 0.001,0.002,0.004...
-#     PerturbRule("drop", 0.1, 0.05)                 # Linear: 0.1,0.15,0.2...
-# ]
-
-# hp_sets = [Hyperparameters(i, now) for i in range(20)]
-# apply_perturbations(hp_sets, rules)
-
-
+    time.sleep(5)
+    mp.spawn(main, args=(hp_sets,), nprocs=world_size, join=True)
 

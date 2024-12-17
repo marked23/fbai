@@ -19,8 +19,13 @@ class Loader:
         validation_size = len(training_dataset) - training_size
         training_dataset, validation_dataset = random_split(training_dataset, [training_size, validation_size])
         
-        training_loader = DataLoader(training_dataset, batch_size=256, shuffle=True)
-        validation_loader = DataLoader(validation_dataset, batch_size=256, shuffle=False)           
+        # Duplicate only training data
+        train_features = training_dataset[:][0].repeat(hp.input_duplicates, 1)  
+        train_labels = training_dataset[:][1].repeat(hp.input_duplicates)
+        training_dataset = TensorDataset(train_features, train_labels)
+
+        training_loader = DataLoader(training_dataset, batch_size=256, shuffle=True, num_workers=0, pin_memory=True)
+        validation_loader = DataLoader(validation_dataset, batch_size=256, shuffle=False, num_workers=0)           
 
         return training_loader, validation_loader
 
