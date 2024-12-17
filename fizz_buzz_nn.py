@@ -11,17 +11,12 @@ class Model(torch.nn.Module):
         hidden_x2 = hp.hidden_dim * 2
         self.linear1 = torch.nn.Linear(hp.input_dim, hidden_x2)
         self.relu1 = torch.nn.ReLU()
-        # self.linear2 = torch.nn.Linear(hidden_x4, hidden_x2)
-        # self.relu2 = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(p=self.drop)
-        # self.linear3 = torch.nn.Linear(hidden_x2, hp.hidden_dim)
         self.linear4 = torch.nn.Linear(hidden_x2, hp.output_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.relu1(self.linear1(x))
-        # x = self.relu2(self.linear2(x))
         x = self.dropout(x)
-        # x = self.linear3(x)
         x = self.linear4(x)
         return x
 
@@ -29,10 +24,10 @@ class Model(torch.nn.Module):
 class WideModel(torch.nn.Module):
     def __init__(self, hp: Hyperparameters):
         super(WideModel, self).__init__()
-        self.layer1 = torch.nn.Linear(10, 64)
+        self.layer1 = torch.nn.Linear(hp.input_dim, 64)
         self.relu1 = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(p=0.2)
-        self.layer2 = torch.nn.Linear(64, 4)
+        self.layer2 = torch.nn.Linear(64, hp.output_dim)
     
     def forward(self, x):
         x = self.relu1(self.layer1(x))
@@ -42,10 +37,10 @@ class WideModel(torch.nn.Module):
 class DeepModel(torch.nn.Module):
     def __init__(self, hp: Hyperparameters):
         super(DeepModel, self).__init__()
-        self.layer1 = torch.nn.Linear(10, 32)
+        self.layer1 = torch.nn.Linear(hp.input_dim, 32)
         self.layer2 = torch.nn.Linear(32, 32)
         self.layer3 = torch.nn.Linear(32, 32)
-        self.layer4 = torch.nn.Linear(32, 4)
+        self.layer4 = torch.nn.Linear(32, hp.output_dim)
         self.relu = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(p=0.2)
     
@@ -61,10 +56,10 @@ class DeepModel(torch.nn.Module):
 class PyramidModel(torch.nn.Module):
     def __init__(self, hp: Hyperparameters):
         super(PyramidModel, self).__init__()
-        self.layer1 = torch.nn.Linear(10, 48)
+        self.layer1 = torch.nn.Linear(hp.input_dim, 48)
         self.layer2 = torch.nn.Linear(48, 24)
         self.layer3 = torch.nn.Linear(24, 12)
-        self.layer4 = torch.nn.Linear(12, 4)
+        self.layer4 = torch.nn.Linear(12, hp.output_dim)
         self.relu = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(p=0.2)
     
@@ -80,22 +75,13 @@ class PyramidModel(torch.nn.Module):
 class ImprovedModel(torch.nn.Module):
     def __init__(self, hp: Hyperparameters):
         super(ImprovedModel, self).__init__()
-        # Input layer
         self.layer1 = torch.nn.Linear(hp.input_dim, 64)
         self.bn1 = torch.nn.BatchNorm1d(64)
-        
-        # Hidden layer
         self.layer2 = torch.nn.Linear(64, 32)
         self.bn2 = torch.nn.BatchNorm1d(32)
-        
-        # Output layer
         self.layer3 = torch.nn.Linear(32, hp.output_dim)
-        
-        # Activation and regularization
         self.relu = torch.nn.ReLU()
-        self.dropout = torch.nn.Dropout(p=0.1)  # Reduced dropout
-        
-        # Better initialization
+        self.dropout = torch.nn.Dropout(p=0.1)
         torch.nn.init.kaiming_normal_(self.layer1.weight)
         torch.nn.init.kaiming_normal_(self.layer2.weight)
         torch.nn.init.xavier_normal_(self.layer3.weight)
@@ -105,12 +91,10 @@ class ImprovedModel(torch.nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.dropout(x)
-        
         x = self.layer2(x)
         x = self.bn2(x)
         x = self.relu(x)
         x = self.dropout(x)
-        
         x = self.layer3(x)
         return x
     
@@ -118,14 +102,11 @@ class ClaudesModel(torch.nn.Module):
     def __init__(self, hp: Hyperparameters):
         super(ClaudesModel, self).__init__()
         self.network = torch.nn.Sequential(
-            # Input layer: 10 binary digits
-            torch.nn.Linear(10, hp.hidden_dim),
+            torch.nn.Linear(hp.input_dim, hp.hidden_dim),
             torch.nn.ReLU(),
-            # Hidden layer
             torch.nn.Linear(hp.hidden_dim, hp.hidden_dim),
             torch.nn.ReLU(),
-            # Output layer: 4 classes (number, fizz, buzz, fizzbuzz)
-            torch.nn.Linear(hp.hidden_dim, 4)
+            torch.nn.Linear(hp.hidden_dim, hp.output_dim)
         )
     
     def forward(self, x):
