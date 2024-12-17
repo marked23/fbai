@@ -9,7 +9,7 @@ from argparse import ArgumentParser, Namespace
 import os
 from fizz_buzz_nn import Model
 import numpy as np
-from hyperparameters import Hyperparameters 
+from hyperparameters import Hyperparameters, HyperparametersLoader
 import datetime
 
 # leave as 'cpu' 
@@ -107,7 +107,7 @@ def create_weight_animation(layer_name, checkpoint_files, model, step: int, vmin
     num_frames = len(checkpoint_files) // step
     ani = FuncAnimation(fig, animate, frames=len(frame_indices), repeat=False)
     writer = FFMpegWriter(
-        fps=15,
+        fps=1,
         bitrate=3000,
         codec='h264_nvenc',
         extra_args=[
@@ -153,7 +153,8 @@ def main():
     
     checkpoint_folder = f"{process_path}/checkpoints"
     checkpoint_files = sorted([os.path.join(checkpoint_folder, f) for f in os.listdir(checkpoint_folder) if f.endswith(".pth")])
-    hp = Hyperparameters.from_json(f"{process_path}/hyperparameters.json")
+    hpl = HyperparametersLoader()
+    hp = hpl.from_json(f"{process_path}/hyperparameters.json")
     model = Model(hp).to(device)
         
     weight_layers = get_weight_layers(model)
